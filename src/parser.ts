@@ -14,18 +14,18 @@ export async function parseMsd(msd: ReadableStream | string, escapes?: boolean):
 
     const output: MSDParameter[] = [];
 
+    /** A partial MSD parameter */
     let components: string[] = [];
-    let writing = false;
+
+    /** Whether we are inside a parameter (`#...;`) */
+    let insideParameter = false;
+
+    /** The last parameter key we've seen (useful for debugging stray text) */
     let lastKey: string | null = null;
 
-    const reset = () => {
-        lastKey = components[0] || '';
-        components = [];
-        writing = false;
-    }
-
-    const write = (chars: string) => {
-        if (writing) {
+    /** Try to write text to the last component, or handle stray text */
+    const writeText = (chars: string) => {
+        if (insideParameter) {
             components[components.length - 1] += chars;
         } else if (lastKey === null) {
             throw new MSDParserError("document doesn't start with a parameter");
@@ -35,38 +35,43 @@ export async function parseMsd(msd: ReadableStream | string, escapes?: boolean):
         }
     }
 
+    /** Append an empty component string */
     const nextComponent = () => {
-        writing = true;
+        insideParameter = true;
         components.push('');
     }
 
-    const complete = () => {
+    /** Form the components into an MSDParameter and reset the state */
+    const finishComponent = () => {
         output.push({
             key: components[0],
             value: components.length > 1 ? components[1] : null,
             extraComponents: components.slice(2),
         });
-        reset();
+        lastKey = components[0] || '';
+        components = [];
+        insideParameter = false;
     }
 
     for (let { token, chars } of await lexMsd(msd)) {
         if (token === 'text') {
-            write(chars);
+            writeText(chars);
         } else if (token === 'start_parameter') {
-            if (writing) {
-                complete();
+            if (insideParameter) {
+                // This only happens when the lexer recovers from a missing semicolon
+                finishComponent();
             }
             nextComponent();
         } else if (token === 'end_parameter') {
-            if (writing) {
-                complete();
+            if (insideParameter) {
+                finishComponent();
             }
         } else if (token === 'next_component') {
-            if (writing) {
+            if (insideParameter) {
                 nextComponent();
             }
         } else if (token === 'escape') {
-            write(chars.slice(1));
+            writeText(chars.slice(1));
         } else if (token === 'comment') {
             // no-op
         } else {

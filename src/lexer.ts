@@ -100,6 +100,7 @@ export async function lexMsd(msd: ReadableStream | string, escapes?: boolean): P
     let msdBuffer: string;
 
     if (typeof msd === "string") {
+        // TODO: make sure this isn't grossly inefficient for large documents
         textReader = null;
         msdBuffer = msd;
     } else {
@@ -126,6 +127,11 @@ export async function lexMsd(msd: ReadableStream | string, escapes?: boolean): P
             msdBuffer += chunk.value;
         }
 
+        // Reading chunks is faster than reading lines, but MSD relies on
+        // lines to determine where comments end & when to recover from a
+        // missing semicolon. This condition enforces that the MSD buffer
+        // always either contains a newline *or* the rest of the input, so
+        // that comments, escapes, etc. don't get split in half.
         while (
             msdBuffer.includes('\n')
             || msdBuffer.includes('\r')
