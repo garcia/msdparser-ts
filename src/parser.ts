@@ -1,13 +1,8 @@
 import { lexMsd } from './lexer';
+import { MSDParameter } from './parameter';
 import { absurd } from './util';
 
 export class MSDParserError extends Error { }
-
-export type MSDParameter = {
-    key: string,
-    value: string | null,
-    extraComponents: string[],
-}
 
 export async function parseMsd(msd: ReadableStream | string, escapes?: boolean): Promise<MSDParameter[]> {
     if (escapes === undefined) escapes = true;

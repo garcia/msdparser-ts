@@ -1,1 +1,2 @@
-export { parseMsd, MSDParameter, MSDParserError } from './parser';
+export { MSDParserError, parseMsd } from './parser';
+export { type MSDParameter } from './parameter';
