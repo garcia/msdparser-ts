@@ -1,4 +1,11 @@
 {
+  "name": "msdparser-ts",
+  "version": "0.1.0",
+  "description": "Parser for MSD documents, e.g. StepMania .sm & .ssc files",
+  "author": "Ash Garcia",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "devDependencies": {
     "@types/jest": "^28.1.4",
     "jest": "^28.1.2",
@@ -6,6 +13,7 @@
     "typescript": "^4.7.4"
   },
   "scripts": {
+    "build": "tsc",
     "test": "jest"
   }
 }
