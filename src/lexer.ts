@@ -113,6 +113,11 @@ export async function* lexMsd(msd: ReadableStream | string, escapes?: boolean): 
     /** Whether we are done reading from the input stream */
     let doneReading = false;
 
+    /** Only the lexer patterns that match the escapes flag. */
+    const lexerPatterns = LEXER_PATTERNS.filter(
+        (pattern) => pattern.escapes === undefined || pattern.escapes === escapes
+    );
+
     while (!doneReading) {
         let chunk = await textReader?.read();
         if (chunk === undefined || chunk.done) {
@@ -133,8 +138,8 @@ export async function* lexMsd(msd: ReadableStream | string, escapes?: boolean): 
         ) {
             let foundMatch = false;
 
-            for (let pattern of LEXER_PATTERNS) {
-                let match = msdBuffer.match(pattern.match)
+            for (let pattern of lexerPatterns) {
+                let match = msdBuffer.match(pattern.match);
                 if (match) {
                     foundMatch = true;
                     msdBuffer = msdBuffer.slice(match[0].length);
@@ -185,5 +190,12 @@ export async function* lexMsd(msd: ReadableStream | string, escapes?: boolean): 
                 throw new Error(`no regex matches ${JSON.stringify(msdBuffer)}`);
             }
         }
+    }
+
+    if (textBuffer.length > 0) {
+        yield {
+            token: 'text',
+            chars: textBuffer,
+        };
     }
 }

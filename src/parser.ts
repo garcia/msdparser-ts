@@ -24,8 +24,11 @@ export async function* parseMsd(msd: ReadableStream | string, escapes?: boolean)
         } else if (lastKey === null) {
             throw new MSDParserError("document doesn't start with a parameter");
         } else {
-            const char = chars.trim()[0];
-            console.warn(`stray ${char} encountered after ${lastKey} parameter`)
+            const nonWhitespace = chars.match(/[^\s\uFEFF]/);
+            if (nonWhitespace !== null) {
+                const char = nonWhitespace[0].charAt(0);
+                console.warn(`stray ${char} encountered after ${lastKey} parameter`)
+            }
         }
     }
 
@@ -52,7 +55,7 @@ export async function* parseMsd(msd: ReadableStream | string, escapes?: boolean)
         return parameter;
     }
 
-    for await (let { token, chars } of lexMsd(msd)) {
+    for await (let { token, chars } of lexMsd(msd, escapes)) {
         if (token === 'text') {
             writeText(chars);
         } else if (token === 'start_parameter') {
@@ -76,5 +79,10 @@ export async function* parseMsd(msd: ReadableStream | string, escapes?: boolean)
         } else {
             absurd(token);
         }
+    }
+
+    // Handle missing ';' at the end of the input
+    if (insideParameter) {
+        yield completeParameter();
     }
 }
