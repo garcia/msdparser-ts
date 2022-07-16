@@ -1,13 +1,12 @@
+import { ReadableStream } from 'node:stream/web';
 import { lexMsd } from './lexer';
 import { MSDParameter } from './parameter';
 import { absurd } from './util';
 
 export class MSDParserError extends Error { }
 
-export async function parseMsd(msd: ReadableStream | string, escapes?: boolean): Promise<MSDParameter[]> {
+export async function* parseMsd(msd: ReadableStream | string, escapes?: boolean): AsyncGenerator<MSDParameter> {
     if (escapes === undefined) escapes = true;
-
-    const output: MSDParameter[] = [];
 
     /** A partial MSD parameter */
     let components: string[] = [];
@@ -37,29 +36,34 @@ export async function parseMsd(msd: ReadableStream | string, escapes?: boolean):
     }
 
     /** Form the components into an MSDParameter and reset the state */
-    const finishComponent = () => {
-        output.push({
+    const completeParameter = () => {
+        const parameter = {
             key: components[0],
             value: components.length > 1 ? components[1] : null,
-            extraComponents: components.slice(2),
-        });
+            ...(components.length > 2 && {
+                extraComponents: components.slice(2),
+            }),
+        };
+
         lastKey = components[0] || '';
         components = [];
         insideParameter = false;
+
+        return parameter;
     }
 
-    for (let { token, chars } of await lexMsd(msd)) {
+    for await (let { token, chars } of lexMsd(msd)) {
         if (token === 'text') {
             writeText(chars);
         } else if (token === 'start_parameter') {
             if (insideParameter) {
                 // This only happens when the lexer recovers from a missing semicolon
-                finishComponent();
+                yield completeParameter();
             }
             nextComponent();
         } else if (token === 'end_parameter') {
             if (insideParameter) {
-                finishComponent();
+                yield completeParameter();
             }
         } else if (token === 'next_component') {
             if (insideParameter) {
@@ -73,6 +77,4 @@ export async function parseMsd(msd: ReadableStream | string, escapes?: boolean):
             absurd(token);
         }
     }
-
-    return output;
 }

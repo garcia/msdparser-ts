@@ -1,8 +1,7 @@
-
 export type MSDParameter = {
     key: string,
     value: string | null,
-    extraComponents: string[],
+    extraComponents?: string[],
 }
 
 export class MSDParameterError extends Error { }
@@ -30,8 +29,10 @@ export function serializeParameter(param: MSDParameter): string {
     if (param.value !== null) {
         output += `:${serializeComponent(param.value)}`;
     }
-    for (let extraComponent of param.extraComponents) {
-        output += `:${serializeComponent(extraComponent)}`;
+    if (param.extraComponents !== undefined) {
+        for (let extraComponent of param.extraComponents) {
+            output += `:${serializeComponent(extraComponent)}`;
+        }
     }
     output += ";";
 

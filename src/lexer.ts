@@ -1,6 +1,7 @@
+import { ReadableStream, TextDecoderStream } from 'node:stream/web';
 import { MSDToken } from './token';
 
-type TokenizedMSD = {
+export type TokenizedMSD = {
     token: MSDToken;
     chars: string;
 }
@@ -18,7 +19,7 @@ type LexerPattern = {
 const LEXER_PATTERNS: LexerPattern[] = [
     {
         pattern: 'escaped_text',
-        match: /[^\\\/:;#]+/,
+        match: /^[^\\\/:;#]+/,
         escapes: true,
         token: {
             outsideParam: 'text',
@@ -27,8 +28,8 @@ const LEXER_PATTERNS: LexerPattern[] = [
     },
     {
         pattern: 'unescaped_text',
-        match: /[^\/:;#]+/,
-        escapes: true,
+        match: /^[^\/:;#]+/,
+        escapes: false,
         token: {
             outsideParam: 'text',
             insideParam: 'text',
@@ -36,8 +37,7 @@ const LEXER_PATTERNS: LexerPattern[] = [
     },
     {
         pattern: '#',
-        match: /#/,
-        escapes: true,
+        match: /^#/,
         token: {
             outsideParam: 'start_parameter',
             insideParam: 'text',
@@ -45,8 +45,7 @@ const LEXER_PATTERNS: LexerPattern[] = [
     },
     {
         pattern: ':',
-        match: /:/,
-        escapes: true,
+        match: /^:/,
         token: {
             outsideParam: 'text',
             insideParam: 'next_component',
@@ -54,8 +53,7 @@ const LEXER_PATTERNS: LexerPattern[] = [
     },
     {
         pattern: ';',
-        match: /;/,
-        escapes: true,
+        match: /^;/,
         token: {
             outsideParam: 'text',
             insideParam: 'end_parameter',
@@ -63,7 +61,7 @@ const LEXER_PATTERNS: LexerPattern[] = [
     },
     {
         pattern: 'escape',
-        match: /(?s)\\./,
+        match: /^\\./s,
         escapes: true,
         token: {
             outsideParam: 'text',
@@ -72,8 +70,7 @@ const LEXER_PATTERNS: LexerPattern[] = [
     },
     {
         pattern: 'comment',
-        match: RegExp("//[^\r\n]*"),
-        escapes: true,
+        match: RegExp("^//[^\r\n]*"),
         token: {
             outsideParam: 'comment',
             insideParam: 'comment',
@@ -81,8 +78,7 @@ const LEXER_PATTERNS: LexerPattern[] = [
     },
     {
         pattern: '/',
-        match: RegExp("/"),
-        escapes: true,
+        match: RegExp("^/"),
         token: {
             outsideParam: 'text',
             insideParam: 'text',
@@ -90,7 +86,7 @@ const LEXER_PATTERNS: LexerPattern[] = [
     },
 ];
 
-export async function lexMsd(msd: ReadableStream | string, escapes?: boolean): Promise<TokenizedMSD[]> {
+export async function* lexMsd(msd: ReadableStream | string, escapes?: boolean): AsyncGenerator<TokenizedMSD> {
     if (escapes === undefined) escapes = true;
 
     /** Text stream for the ReadableStream, or null if `msd` is a string */
@@ -117,8 +113,6 @@ export async function lexMsd(msd: ReadableStream | string, escapes?: boolean): P
     /** Whether we are done reading from the input stream */
     let doneReading = false;
 
-    const output: TokenizedMSD[] = [];
-
     while (!doneReading) {
         let chunk = await textReader?.read();
         if (chunk === undefined || chunk.done) {
@@ -137,10 +131,13 @@ export async function lexMsd(msd: ReadableStream | string, escapes?: boolean): P
             || msdBuffer.includes('\r')
             || (doneReading && msdBuffer)
         ) {
+            let foundMatch = false;
+
             for (let pattern of LEXER_PATTERNS) {
                 let match = msdBuffer.match(pattern.match)
                 if (match) {
-                    msdBuffer = msdBuffer.slice(match.length);
+                    foundMatch = true;
+                    msdBuffer = msdBuffer.slice(match[0].length);
                     let matchedText = match[0];
                     let token = insideParameter
                         ? pattern.token.insideParam
@@ -163,7 +160,10 @@ export async function lexMsd(msd: ReadableStream | string, escapes?: boolean): P
 
                     // Non-text matched, so yield & discard any buffered text
                     if (textBuffer.length > 0) {
-                        output.push({ token: 'text', chars: textBuffer });
+                        yield {
+                            token: 'text',
+                            chars: textBuffer,
+                        };
                         textBuffer = '';
                     }
 
@@ -173,14 +173,17 @@ export async function lexMsd(msd: ReadableStream | string, escapes?: boolean): P
                         insideParameter = false;
                     }
 
-                    output.push({
+                    yield {
                         token,
                         chars: matchedText,
-                    });
+                    };
+                    break;
                 }
+            }
+
+            if (!foundMatch) {
+                throw new Error(`no regex matches ${JSON.stringify(msdBuffer)}`);
             }
         }
     }
-
-    return [];
 }
